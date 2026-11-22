@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>AGRO 지도</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#1f4d3a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="AGRO 지도">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  :root {
+    --ink: #1f2a24; --sub: #5d6964; --line: #dfe4e1; --bg: #ffffff; --soft: #f4f6f5;
+    --brand: #1f4d3a; --warn: #9a5b13;
+    --v-daeseo: #2f6b4f; --v-dubaek: #a8641f; --v-jinseo: #2c5d8a; --v-jeonggam: #7a5a9a; --v-etc: #6b6f6d;
+    --lv-bad: #b23a2b; --lv-mid: #c99a1e; --lv-good: #3f7d58; --lv-none: #7d8380;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", system-ui, sans-serif;
+    color: var(--ink); background: var(--bg); font-size: 15px; -webkit-text-size-adjust: 100%; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  header { background: var(--bg); border-bottom: 1px solid var(--line); padding: calc(8px + env(safe-area-inset-top)) 10px 6px; z-index: 5; }
+  .bar { display: flex; gap: 6px; }
+  #q { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--soft); outline: none; }
+  #q:focus { border-color: var(--brand); background: #fff; }
+  .btn { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; white-space: nowrap; }
+  .btn.on, .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .chips { display: flex; gap: 6px; margin-top: 6px; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 15px;
+    background: #fff; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; }
+  .chip.on { border-color: var(--brand); color: var(--brand); font-weight: 700; }
+  .chip.off { color: #a3aaa6; }
+  .chip.off svg { opacity: .35; }
+  select.chip { padding-right: 6px; max-width: 150px; }
+  .sep { flex: none; width: 1px; background: var(--line); margin: 4px 2px; }
+  .count { margin-top: 5px; font-size: 12px; color: var(--sub); }
+  svg.mk { stroke: #fff; stroke-width: 1.8; paint-order: stroke; display: block;
+    filter: drop-shadow(0 0 1px rgba(0,0,0,.75)); overflow: visible; }
+  .chip svg.mk, .addr svg.mk { filter: none; stroke-width: 0; flex: none; }
+
+  #mapWrap { position: relative; flex: 1; min-height: 0; }
+  #map { position: absolute; inset: 0; background: #e9ecea; }
+  .tools { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; z-index: 4; }
+  .tools .btn { height: 36px; padding: 0 10px; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+
+  .pin { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+  .pin span { display: none; font-size: 12px; background: rgba(255,255,255,.92); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+  #map.labels .pin span { display: block; }
+  .pin.sel svg.mk { transform: scale(1.35); filter: drop-shadow(0 0 2px #000); }
+  .pin.check svg.mk { stroke-dasharray: 2.2 1.6; }
+  .cluster { min-width: 44px; padding: 5px 9px 6px; border-radius: 18px; background: var(--brand); color: #fff; text-align: center;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; line-height: 1.15; }
+  .cluster b { display: block; font-size: 15px; }
+  .cluster small { display: block; font-size: 11px; opacity: .9; white-space: nowrap; }
+  .me { width: 14px; height: 14px; border-radius: 50%; background: #2a6fdb; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+
+  #results { position: absolute; left: 0; right: 0; top: 0; max-height: 60%; overflow-y: auto; background: #fff;
+    border-bottom: 1px solid var(--line); z-index: 6; box-shadow: 0 4px 10px rgba(0,0,0,.08); }
+  .res { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: #fff; }
+  .res small { display: block; color: var(--sub); margin-top: 2px; font-size: 12px; }
+  .res-head { padding: 8px 12px; font-size: 12px; color: var(--sub); background: var(--soft); display: flex; justify-content: space-between; align-items: center; }
+  .link { border: 0; background: none; color: var(--brand); text-decoration: underline; padding: 0; }
+
+  #sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 62%; overflow-y: auto; background: #fff;
+    border-top: 1px solid var(--line); border-radius: 12px 12px 0 0; z-index: 7; box-shadow: 0 -4px 14px rgba(0,0,0,.12);
+    padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); }
+  .sh-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .sh-top h2 { margin: 0; font-size: 18px; }
+  .meta { color: var(--sub); font-size: 13px; margin-top: 3px; line-height: 1.5; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 400; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 4px; color: var(--sub); vertical-align: middle; }
+  .badge.warn { color: var(--warn); border-color: #e4cba6; }
+  .badge.p-상 { color: var(--lv-good); border-color: #c4d6ca; }
+  .badge.p-중 { color: #8a6a12; border-color: #e6d6a8; }
+  .badge.p-하 { color: var(--lv-bad); border-color: #e2bdb7; }
+  .parcel { border-top: 1px solid var(--line); padding: 10px 0; }
+  .parcel.cur { background: var(--soft); margin: 0 -14px; padding: 10px 14px; }
+  .parcel .addr { font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .parcel .note { color: var(--sub); font-size: 13px; margin-top: 2px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .more { display: block; width: 100%; height: 36px; margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); font-size: 13px; }
+  .parcel.cur + .more { margin-top: 0; }
+  .acts a, .acts button { height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff;
+    font-size: 13px; text-decoration: none; color: var(--ink); display: inline-flex; align-items: center; }
+
+  #menu { position: absolute; right: 10px; top: 54px; width: 250px; background: #fff; border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: 0 6px 18px rgba(0,0,0,.16); z-index: 9; padding: 6px; }
+  #menu button { display: block; width: 100%; text-align: left; border: 0; background: #fff; padding: 10px; border-radius: 6px; }
+  #menu button:active { background: var(--soft); }
+  #menu .hint { font-size: 12px; color: var(--sub); padding: 4px 10px 8px; line-height: 1.5; }
+
+  #pickBar { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 8; background: var(--ink); color: #fff;
+    border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; }
+  #pickBar button { border: 1px solid rgba(255,255,255,.5); background: none; color: #fff; border-radius: 6px; height: 30px; padding: 0 10px; }
+
+  #gate { position: absolute; inset: 0; background: rgba(255,255,255,.97); z-index: 20; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .gate-box { width: 100%; max-width: 320px; }
+  .gate-box h1 { font-size: 20px; margin: 0 0 4px; }
+  .gate-box p { margin: 0 0 14px; color: var(--sub); font-size: 13px; }
+  .gate-box input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
+  .gate-box .btn { width: 100%; height: 44px; }
+  #gateMsg { color: var(--lv-bad); font-size: 13px; min-height: 18px; margin-top: 8px; }
+
+  /* 넓은 화면(PC, 태블릿 가로)에서는 농가 창을 아래가 아니라 왼쪽에 띄워 지도를 가리지 않는다. */
+  @media (min-width: 900px) {
+    #sheet { left: 10px; right: auto; top: 10px; bottom: 10px; width: 370px; max-height: none; border: 1px solid var(--line); border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.16); padding-bottom: 14px; }
+    #results { left: 10px; right: auto; top: 10px; width: 370px; max-height: 70%; border: 1px solid var(--line); border-radius: 12px; }
+    #pickBar { left: 50%; right: auto; transform: translateX(-50%); min-width: 360px; }
+  }
+
+  #toast { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: rgba(31,42,36,.92); color: #fff;
+    padding: 8px 14px; border-radius: 18px; font-size: 13px; z-index: 30; max-width: 90%; text-align: center; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="bar">
+      <input id="q" type="search" placeholder="농가명, 단체, 주소 검색" autocomplete="off">
+      <button class="btn" id="menuBtn">메뉴</button>
+    </div>
+    <div class="chips" id="chipsA"></div>
+    <div class="chips" id="chipsB"></div>
+    <div class="count" id="count"></div>
+  </header>
+
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div class="tools">
+      <button class="btn" id="btnSky">위성</button>
+      <button class="btn" id="btnCad">지적</button>
+      <button class="btn" id="btnMe">내 위치</button>
+    </div>
+    <div id="results" hidden></div>
+    <div id="pickBar" hidden><span id="pickText"></span><button id="pickCancel">취소</button></div>
+    <div id="menu" hidden>
+      <button id="mGeo">주소를 좌표로 변환</button>
+      <div class="hint" id="mGeoHint"></div>
+      <button id="mAll">전체 한눈에 보기</button>
+      <button id="mReload">새로 고침</button>
+      <button id="mKey">암호·이름 다시 입력</button>
+    </div>
+    <section id="sheet" hidden></section>
+    <div id="toast" hidden></div>
+  </div>
+
+  <div id="gate" hidden>
+    <div class="gate-box">
+      <h1>AGRO 지도</h1>
+      <p>국산감자 필지 지도</p>
+      <input id="gKey" type="password" placeholder="팀 암호" autocomplete="off">
+      <input id="gName" type="text" placeholder="이름 (수정 기록용)" autocomplete="off">
+      <button class="btn primary" id="gGo">들어가기</button>
+      <div id="gateMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== 설정 ===== */
+var KAKAO_JS_KEY = 'cc1872e3010249a2e4d26d5146b789a5';   // 카카오 앱 '농가현장카드'의 JavaScript 키(등록한 주소에서만 동작)
+var API_URL = 'https://script.google.com/macros/s/AKfycbwXrT64xjKpKFgPGapxXg9YEAWybPUl7ugnvPbalADdnkWtd8uLg0g-BmTz5I78qNzx/exec';   // 시트 연결용 Apps Script 웹앱 주소. 팀 암호가 맞아야 자료가 나온다
+// 이 파일은 공개 저장소에 올라간다. 농가 정보나 농가카드 주소를 여기에 적지 않는다.
+var CLUSTER_FROM = 10;   // 지도 단계가 이 값 이상(멀리)이면 시군 단위로 묶어 숫자로 보여 준다
+var CLUSTER_WIDE = 12;   // 이 값 이상(전국)이면 시도 단위로 묶는다
+
+/* ===== 상태 ===== */
+var S = { cur: 0, season: 0, seasons: [], cardUrl: '', farms: [], spots: [], places: [], placeBy: {}, farmBy: {}, now: [],
+  types: { '밭': true, '하우스': true, '집': true }, colorPref: 'prio', colorBy: 'prio', pick: '전체', group: '',
+  vars: [], sel: null, picking: null, sky: false, cad: false, busy: false, clustered: null };
+var map, geocoder, meOverlay, overlays = [], pinEl = {};
+var IN_GAS = !!(window.google && google.script && google.script.run);
+var IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+var TYPES = ['밭', '하우스', '집'];
+// 품종 칩은 고정이 아니다. 그 시즌에 밭이 VARIETY_MIN 곳 이상인 품종만 따로 나오고 나머지는 '기타'로 묶인다.
+// (2026은 대서·두백·진서, 진서가 빠지고 정감이 늘면 대서·두백·정감으로 바뀐다)
+var VARIETIES = ['대서', '두백', '진서', '정감'];
+var VARIETY_MIN = 5;
+var V_COLOR = { '대서': 'var(--v-daeseo)', '두백': 'var(--v-dubaek)', '진서': 'var(--v-jinseo)', '정감': 'var(--v-jeonggam)', '기타': 'var(--v-etc)' };
+var PRIOS = ['상', '중', '하', '미평가'];
+// 화면에 보이는 이름. 자료 값(상·중·하)은 그대로 두고 표시만 바꾸려면 여기만 고친다(예: 'A', 'B', 'C').
+var P_LABEL = { '상': '상', '중': '중', '하': '하', '미평가': '미평가' };
+// 관리수준: 상 = 우수, 하 = 먼저 점검할 농가. (2026-11-22 사용자 결정. 농가등급 엑셀의 예전 '우선순위'와는 상·하가 반대다)
+var P_COLOR = { '상': 'var(--lv-good)', '중': 'var(--lv-mid)', '하': 'var(--lv-bad)', '미평가': 'var(--lv-none)' };
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+  return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function norm(s) { return String(s == null ? '' : s).replace(/[ 　]/g, ' ').replace(/\s+/g, ' ').trim(); }
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k) || ''; localStorage.setItem(k, v); } catch (e) { return ''; } }
+var toastT;
+function toast(msg, keep) { var t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT);
+  if (!keep) toastT = setTimeout(function () { t.hidden = true; }, 2600); }
+
+/* ===== 서버 호출 ===== */
+function call(api, payload) {
+  payload = payload || {};
+  payload.key = store('agro_key');
+  if (window.AGRO_MOCK) return window.AGRO_MOCK(api, payload);
+  if (IN_GAS) {
+    return new Promise(function (res, rej) {
+      google.script.run.withSuccessHandler(res).withFailureHandler(function (e) { rej(new Error(e && e.message || e)); })[api](payload);
+    });
+  }
+  if (!API_URL) return Promise.reject(new Error('API_URL이 비어 있습니다'));
+  payload.api = api;
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+    .then(function (r) { return r.json(); });
+}
+
+/* ===== 모양·색 ===== */
+// 밭은 동그라미, 하우스는 네모, 집은 세모
+function shape(type, color, size) {
+  var body = type === '하우스' ? '<rect x="3" y="3" width="12" height="12" rx="1.5"/>'
+    : type === '집' ? '<path d="M9 2 16.6 15.6H1.4Z"/>' : '<circle cx="9" cy="9" r="6.4"/>';
+  return '<svg class="mk" viewBox="0 0 18 18" width="' + (size || 18) + '" height="' + (size || 18) + '" style="fill:' + color + '" aria-hidden="true">' + body + '</svg>';
+}
+// 한 품종만 적혀 있으면 그 품종, 여러 품종이거나 신품종이 섞여 있으면 ''. '채종농가' 같은 덧붙임 말은 무시한다.
+function vname(v) {
+  v = norm(v); var hit = VARIETIES.filter(function (n) { return v.indexOf(n) >= 0; });
+  return (hit.length === 1 && !/신품종|\d{4}/.test(v)) ? hit[0] : '';
+}
+function vcat(v) { var n = vname(v); return n && S.vars.indexOf(n) >= 0 ? n : '기타'; }
+function farmOf(sp) { return S.farmBy[sp.season + '|' + sp.code]; }
+function spotVariety(sp) { var f = farmOf(sp); return norm(sp.variety) || (f ? f.variety : ''); }
+function prioOf(f) { return f && P_COLOR[f.prio] && f.prio !== '미평가' ? f.prio : '미평가'; }
+function catOf(sp) { return S.colorBy === 'prio' ? prioOf(farmOf(sp)) : vcat(spotVariety(sp)); }
+function colorOf(sp) { return (S.colorBy === 'prio' ? P_COLOR : V_COLOR)[catOf(sp)]; }
+function hasXY(p) { return !!p && typeof p.lat === 'number' && typeof p.lng === 'number'; }
+function shortAddr(a) { var t = norm(norm(a).split(/[,\/~]/)[0]).split(' '); return t.slice(-2).join(' '); }
+var SIDO_SHORT = { '충청남도': '충남', '충청북도': '충북', '전라남도': '전남', '전라북도': '전북', '경상남도': '경남', '경상북도': '경북' };
+function sigun(p) {
+  var t = norm(p.addr2 || p.addr).split(' ');
+  if (t.length < 2) return '기타';
+  var a = SIDO_SHORT[t[0]] || t[0].replace(/(통합특별시|특별자치도|특별자치시|광역시|특별시|도)$/, ''); // 카카오는 전남을 '전남광주통합특별시'로 돌려준다
+  return a + ' ' + t[1];
+}
+
+/* ===== 지금 시즌에 보이는 것 ===== */
+function sid(sp) { return sp.season + '|' + sp.code + '|' + sp.type + '|' + sp.no; }
+function rebuild() {
+  S.now = S.spots.filter(function (sp) { return sp.season === S.season && farmOf(sp); });
+  S.now.forEach(function (sp) { sp.place = S.placeBy[sp.pid]; sp.id = sid(sp); });
+  S.now = S.now.filter(function (sp) { return sp.place; });
+  S.spotBy = {}; S.now.forEach(function (sp) { S.spotBy[sp.id] = sp; });
+  var vn = {}; S.now.forEach(function (sp) { if (sp.type !== '밭') return; var n = vname(spotVariety(sp)); if (n) vn[n] = (vn[n] || 0) + 1; });
+  S.vars = VARIETIES.filter(function (n) { return (vn[n] || 0) >= VARIETY_MIN; });
+  var hasPrio = S.farms.some(function (f) { return f.season === S.season && P_COLOR[f.prio]; });
+  S.hasPrio = hasPrio;
+  S.colorBy = hasPrio ? S.colorPref : 'variety'; // 우선순위가 없는 시즌은 품종 색으로
+  if (cats().indexOf(S.pick) < 0) S.pick = '전체';
+}
+function cats() { return ['전체'].concat(S.colorBy === 'prio' ? PRIOS : S.vars.concat(['기타'])); }
+function visible(sp) {
+  var f = farmOf(sp);
+  if (!S.types[sp.type]) return false;
+  if (S.group && f.group !== S.group) return false;
+  if (S.pick !== '전체' && catOf(sp) !== S.pick) return false;
+  return true;
+}
+function shown() { return S.now.filter(function (sp) { return visible(sp) && hasXY(sp.place); }); }
+function missing() { return S.now.filter(function (sp) { return !hasXY(sp.place); }); }
+
+/* ===== 지도 ===== */
+function loadKakao() {
+  return new Promise(function (res, rej) {
+    if (window.kakao && kakao.maps && kakao.maps.load) return kakao.maps.load(res);
+    if (!KAKAO_JS_KEY) return rej(new Error('카카오 JavaScript 키가 비어 있습니다(index.html 위쪽 설정)'));
+    var s = document.createElement('script');
+    s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + encodeURIComponent(KAKAO_JS_KEY) + '&libraries=services&autoload=false';
+    s.onload = function () { if (window.kakao && kakao.maps) kakao.maps.load(res); else rej(new Error('카카오 지도를 불러오지 못했습니다')); };
+    s.onerror = function () { rej(new Error('카카오 지도를 불러오지 못했습니다. 키가 맞는지, 카카오에 이 주소가 등록돼 있는지 확인: ' + location.origin)); };
+    document.head.appendChild(s);
+  });
+}
+function initMap() {
+  map = new kakao.maps.Map($('map'), { center: new kakao.maps.LatLng(36.35, 127.6), level: 12 });
+  geocoder = new kakao.maps.services.Geocoder();
+  kakao.maps.event.addListener(map, 'zoom_changed', onZoom);
+  kakao.maps.event.addListener(map, 'click', function (e) {
+    if (S.picking) return placeSpot(S.picking, e.latLng.getLat(), e.latLng.getLng());
+    closeSheet(); $('menu').hidden = true;
+  });
+}
+function onZoom() {
+  var lv = map.getLevel();
+  $('map').classList.toggle('labels', lv <= 5);
+  if (clusterMode() !== S.clustered) drawPins();
+}
+function clusterMode() { var lv = map.getLevel(); return lv >= CLUSTER_WIDE ? 'sido' : lv >= CLUSTER_FROM ? 'sigun' : ''; }
+function LL(p) { return new kakao.maps.LatLng(p.lat, p.lng); }
+
+function drawPins() {
+  overlays.forEach(function (o) { o.setMap(null); });
+  overlays = []; pinEl = {};
+  var list = shown();
+  S.clustered = clusterMode();
+  if (S.clustered) {
+    var groups = {};
+    list.forEach(function (sp) { var k = sigun(sp.place); if (S.clustered === 'sido') k = k.split(' ')[0];
+      (groups[k] = groups[k] || []).push(sp); });
+    Object.keys(groups).forEach(function (name) {
+      var g = groups[name], lat = 0, lng = 0;
+      g.forEach(function (sp) { lat += sp.place.lat; lng += sp.place.lng; });
+      var el = document.createElement('div'); el.className = 'cluster';
+      el.innerHTML = '<b>' + g.length + '</b><small>' + esc(name) + '</small>';
+      el.addEventListener('click', function (ev) { ev.stopPropagation(); if (!S.picking) fit(g, S.clustered === 'sido' ? CLUSTER_WIDE - 1 : CLUSTER_FROM - 1); });
+      add(new kakao.maps.CustomOverlay({ position: new kakao.maps.LatLng(lat / g.length, lng / g.length), content: el, xAnchor: 0.5, yAnchor: 0.5, clickable: true }));
+    });
+  } else {
+    list.forEach(function (sp) {
+      var f = farmOf(sp), el = document.createElement('div');
+      el.className = 'pin' + (sp.place.status === '확인필요' ? ' check' : '') + (S.sel === sp.id ? ' sel' : '');
+      el.innerHTML = shape(sp.type, colorOf(sp));
+      var lab = document.createElement('span'); lab.textContent = f.name; el.appendChild(lab);
+      el.addEventListener('click', function (ev) { ev.stopPropagation(); if (!S.picking) openFarm(sp.code, sp.id); });
+      pinEl[sp.id] = el;
+      add(new kakao.maps.CustomOverlay({ position: LL(sp.place), content: el, xAnchor: 0, yAnchor: 0.5, clickable: true }));
+    });
+  }
+  function add(o) { o.setMap(map); overlays.push(o); }
+  var n = {}; TYPES.forEach(function (t) { n[t] = 0; });
+  S.now.forEach(function (sp) { n[sp.type]++; });
+  var farms = S.farms.filter(function (f) { return f.season === S.season; }).length, miss = missing().length;
+  $('count').textContent = S.season + '년 · 농가 ' + farms + ' · 밭 ' + n['밭'] + ' · 하우스 ' + n['하우스'] + ' · 집 ' + n['집'] +
+    (miss ? ' · 좌표 없음 ' + miss : '');
+}
+// 좁은 범위로 맞출 때 너무 가까이 붙지 않게, 묶음을 풀 때는 maxLevel 까지만 멀어지게 한다.
+function fit(list, maxLevel) {
+  var pts = list.filter(function (sp) { return hasXY(sp.place); });
+  if (!pts.length) return;
+  if (pts.length === 1) { map.setLevel(4); map.setCenter(LL(pts[0].place)); return; }
+  var b = new kakao.maps.LatLngBounds();
+  pts.forEach(function (sp) { b.extend(LL(sp.place)); });
+  map.setBounds(b, 50, 70, 50, 40); // 가장자리와 오른쪽 버튼에 가려지지 않게 여백을 둔다
+  if (maxLevel && map.getLevel() > maxLevel) map.setLevel(maxLevel);
+}
+
+/* ===== 위쪽 칩 ===== */
+function drawChips() {
+  var a = $('chipsA'); a.innerHTML = '';
+  var ss = document.createElement('select'); ss.className = 'chip on';
+  ss.innerHTML = S.seasons.map(function (y) { return '<option value="' + y + '"' + (y === S.season ? ' selected' : '') + '>' + y + '년' + (y === S.cur ? '' : ' (지난 시즌)') + '</option>'; }).join('');
+  ss.onchange = function () { S.season = Number(ss.value); S.group = ''; closeSheet(); rebuild(); drawChips(); drawPins(); fit(shown()); };
+  a.appendChild(ss);
+  var sel = document.createElement('select'); sel.className = 'chip' + (S.group ? ' on' : '');
+  var groups = {}; S.farms.forEach(function (f) { if (f.season === S.season && f.group) groups[f.group] = 1; });
+  sel.innerHTML = '<option value="">단체 전체</option>' + Object.keys(groups).sort().map(function (g) {
+    return '<option' + (S.group === g ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('');
+  sel.onchange = function () { S.group = sel.value; drawChips(); drawPins(); fit(shown(), S.group ? CLUSTER_FROM - 1 : 0); };
+  a.appendChild(sel);
+  if (S.hasPrio) {
+    var c = document.createElement('button'); c.className = 'chip';
+    c.textContent = '색: ' + (S.colorBy === 'prio' ? '관리수준' : '품종');
+    c.onclick = function () { S.colorPref = S.colorBy = S.colorBy === 'prio' ? 'variety' : 'prio'; S.pick = '전체'; store('agro_color', S.colorPref); drawChips(); drawPins(); };
+    a.appendChild(c);
+  }
+  var miss = missing().length;
+  if (miss) { var m = document.createElement('button'); m.className = 'chip'; m.textContent = '좌표 없음 ' + miss; m.onclick = showMissing; a.appendChild(m); }
+
+  var b = $('chipsB'); b.innerHTML = '';
+  TYPES.forEach(function (t) {
+    var x = document.createElement('button'); x.className = 'chip ' + (S.types[t] ? 'on' : 'off');
+    x.innerHTML = shape(t, 'var(--ink)', 13) + esc(t);
+    x.onclick = function () { S.types[t] = !S.types[t]; store('agro_types', JSON.stringify(S.types)); drawChips(); drawPins(); };
+    b.appendChild(x);
+  });
+  var sp = document.createElement('span'); sp.className = 'sep'; b.appendChild(sp);
+  var col = S.colorBy === 'prio' ? P_COLOR : V_COLOR;
+  cats().forEach(function (v) {
+    var x = document.createElement('button'); x.className = 'chip' + (S.pick === v ? ' on' : '');
+    x.innerHTML = (v === '전체' ? '' : shape('밭', col[v], 11)) + esc(S.colorBy === 'prio' && P_LABEL[v] ? P_LABEL[v] : v);
+    x.onclick = function () { S.pick = v; drawChips(); drawPins(); };
+    b.appendChild(x);
+  });
+}
+
+/* ===== 검색 ===== */
+function search(q) {
+  q = norm(q).toLowerCase(); var box = $('results');
+  if (!q) { box.hidden = true; return; }
+  var hits = S.farms.filter(function (f) {
+    if (f.season !== S.season) return false;
+    if ((f.name + ' ' + f.group).toLowerCase().indexOf(q) >= 0) return true;
+    return S.now.some(function (sp) { return sp.code === f.code && (sp.place.addr + ' ' + sp.place.addr2).toLowerCase().indexOf(q) >= 0; });
+  }).slice(0, 40);
+  box.innerHTML = '<div class="res-head"><span>농가 ' + hits.length + '곳</span><button class="link" data-x>닫기</button></div>' +
+    (hits.length ? hits.map(function (f) {
+      var n = S.now.filter(function (sp) { return sp.code === f.code && sp.type === '밭'; }).length;
+      return '<button class="res" data-code="' + esc(f.code) + '">' + esc(f.name) +
+        '<small>' + esc(f.group) + ' · ' + esc(f.variety) + ' · 밭 ' + n + '</small></button>';
+    }).join('') : '<div class="res"><small>찾는 농가가 없습니다</small></div>');
+  box.hidden = false;
+}
+function showMissing() {
+  var list = missing(), box = $('results');
+  box.innerHTML = '<div class="res-head"><span>좌표 없는 곳 ' + list.length + '건</span><button class="link" data-x>닫기</button></div>' +
+    list.map(function (sp) { var f = farmOf(sp);
+      return '<button class="res" data-code="' + esc(sp.code) + '" data-sid="' + esc(sp.id) + '">' + esc(sp.place.addr) +
+        '<small>' + esc(f.name) + ' · ' + esc(sp.type) + ' · ' + esc(sp.place.status || '미변환') + '</small></button>'; }).join('');
+  box.hidden = false; closeSheet();
+}
+
+/* ===== 농가 상세 ===== */
+function navLinks(p) {
+  var label = encodeURIComponent(shortAddr(p.addr) || '필지');
+  var out = '<a target="_blank" rel="noopener" href="https://map.kakao.com/link/to/' + label + ',' + p.lat + ',' + p.lng + '">카카오맵</a>';
+  if (IS_MOBILE) {
+    out += '<a target="_top" href="nmap://route/car?dlat=' + p.lat + '&dlng=' + p.lng + '&dname=' + label + '&appname=agro.map">네이버지도</a>';
+    out += '<a target="_top" href="tmap://route?goalname=' + label + '&goalx=' + p.lng + '&goaly=' + p.lat + '">티맵</a>';
+  } else {
+    out += '<a target="_blank" rel="noopener" href="https://map.naver.com/p/search/' + encodeURIComponent(norm(p.addr2 || p.addr)) + '">네이버지도</a>';
+  }
+  return out;
+}
+function placeInfo(p) {
+  var a = [];
+  if (p.area) a.push('지번 면적 ' + Math.round(p.area).toLocaleString() + '평');
+  if (p.farmmap) a.push('팜맵 ' + p.farmmap);
+  if (p.soil) a.push('토성 ' + p.soil);
+  if (p.drain) a.push('배수 ' + p.drain);
+  if (p.gravel) a.push('자갈 ' + p.gravel);
+  if (p.rock) a.push('모암 ' + p.rock);
+  return a.join(' · ');
+}
+function isWide() { return window.matchMedia && window.matchMedia('(min-width: 900px)').matches; }
+function spotBlock(sp, cur) {
+  var pl = sp.place, st = pl.status && pl.status !== '변환' ? '<span class="badge' + (pl.status === '직접지정' ? '' : ' warn') + '">' + esc(pl.status) + '</span>' : '';
+  var note = [sp.type === '밭' ? norm(sp.variety) : '', norm(sp.memo)].filter(Boolean).join(' · ');
+  var info = placeInfo(pl);
+  return '<div class="parcel' + (cur ? ' cur' : '') + '">' +
+    '<div class="addr">' + shape(sp.type, colorOf(sp), 14) + '<span>' + esc(sp.type) + (sp.type === '밭' ? ' ' + sp.no : '') + ' · ' + esc(pl.addr) + st + '</span></div>' +
+    (note ? '<div class="note">' + esc(note) + '</div>' : '') + (info ? '<div class="note">' + esc(info) + '</div>' : '') +
+    '<div class="acts">' + (hasXY(pl) ? (cur ? '' : '<button data-go="' + esc(sp.id) + '">지도에서 보기</button>') + navLinks(pl) : '') +
+    '<button data-pick="' + esc(sp.id) + '">' + (hasXY(pl) ? '위치 고치기' : '위치 직접 지정') + '</button></div></div>';
+}
+// 처음에는 누른 곳 하나만 작은 카드로 보여 주고, 나머지는 펼쳤을 때만 보여 준다.
+// opt.keep: 펼침 상태 유지, opt.still: 지도를 움직이지 않음
+function openFarm(code, spotId, opt) {
+  opt = opt || {};
+  var f = S.farmBy[S.season + '|' + code]; if (!f) return;
+  var list = S.now.filter(function (sp) { return sp.code === code; }).sort(function (x, y) {
+    return (TYPES.indexOf(x.type) - TYPES.indexOf(y.type)) || (x.no - y.no); });
+  if (!opt.keep) S.expanded = isWide();
+  S.sel = spotId || null; S.openCode = code;
+  Object.keys(pinEl).forEach(function (id) { pinEl[id].classList.toggle('sel', id === S.sel); });
+  var p = prioOf(f), cur = spotId && S.spotBy[spotId];
+  var rest = list.filter(function (sp) { return sp !== cur; });
+  var h = '<div class="sh-top"><div><h2>' + esc(f.name) +
+    (S.hasPrio ? '<span class="badge p-' + esc(p) + '">' + (p === '미평가' ? '수준 미평가' : '수준 ' + esc(P_LABEL[p]) + (p === '하' ? ' · 먼저 점검' : '')) + '</span>' : '') + '</h2>' +
+    '<div class="meta">' + esc(f.group) + ' · ' + esc(f.variety) + (f.area ? ' · ' + esc(f.area) + '평' : '') +
+    (f.prioBase && p !== '미평가' ? ' · 수준 기준 ' + esc(f.prioBase) : '') + '<br>' +
+    (S.season !== S.cur ? S.season + '년 기록' : f.visitDate ? '최근 점검 ' + esc(f.visitDate) + (f.visitStage ? ' (' + esc(f.visitStage) + ')' : '') : '점검 기록 없음') +
+    (/^https:\/\//.test(S.cardUrl) ? ' · <a class="link" target="_blank" rel="noopener" href="' + esc(S.cardUrl) + '">농가카드</a>' : '') + '</div></div>' +
+    '<button class="btn" data-close>닫기</button></div>';
+  if (!list.length) h += '<div class="parcel"><div class="note">등록된 곳이 없습니다. 농가카드에서 주소를 넣으면 여기에 나옵니다.</div></div>';
+  if (cur) h += spotBlock(cur, true);
+  if (rest.length) {
+    var n = {}; rest.forEach(function (sp) { n[sp.type] = (n[sp.type] || 0) + 1; });
+    var label = TYPES.filter(function (t) { return n[t]; }).map(function (t) { return t + ' ' + n[t]; }).join(' · ');
+    h += '<button class="more" data-more>' + (S.expanded ? '접기' : (cur ? '이 농가의 다른 곳 보기 (' : '등록된 곳 보기 (') + label + ')') + '</button>';
+    if (S.expanded) rest.forEach(function (sp) { h += spotBlock(sp, false); });
+  }
+  var sh = $('sheet'); sh.innerHTML = h; sh.hidden = false; sh.scrollTop = 0;
+  $('results').hidden = true; $('menu').hidden = true;
+  if (!opt.still) {
+    if (cur && hasXY(cur.place)) fit([cur]); else fit(list, 9);
+    // 창에 점이 가려지지 않게 지도를 비켜 준다. 폰은 아래 창, 넓은 화면은 왼쪽 창.
+    if (map.panBy && list.some(function (sp) { return hasXY(sp.place); })) {
+      if (isWide()) map.panBy(-Math.round(sh.offsetWidth / 2), 0); else map.panBy(0, Math.round(sh.offsetHeight / 2));
+    }
+  }
+  if (S.clustered) drawPins();
+  if (pinEl[S.sel]) pinEl[S.sel].classList.add('sel');
+}
+function closeSheet() { $('sheet').hidden = true; S.sel = null;
+  Object.keys(pinEl).forEach(function (id) { pinEl[id].classList.remove('sel'); }); }
+
+/* ===== 위치 직접 지정 ===== */
+function startPick(spotId) {
+  var sp = S.spotBy[spotId]; if (!sp) return;
+  S.picking = spotId; $('sheet').hidden = true;
+  $('pickText').textContent = '지도를 눌러 위치 지정: ' + shortAddr(sp.place.addr);
+  $('pickBar').hidden = false;
+}
+function endPick() { S.picking = null; $('pickBar').hidden = true; }
+function placeSpot(spotId, lat, lng) {
+  var sp = S.spotBy[spotId]; endPick();
+  var item = { id: sp.pid, lat: +lat.toFixed(7), lng: +lng.toFixed(7), addr2: sp.place.addr2 || '', pnu: '', status: '직접지정' };
+  toast('저장 중', true);
+  save([item]).then(function () { toast('위치를 저장했습니다'); drawChips(); drawPins(); openFarm(sp.code, spotId, { keep: true }); })
+    .catch(function (e) { toast('저장 실패: ' + e.message); });
+}
+function save(items) {
+  return call('saveCoords', { items: items, by: store('agro_name') }).then(function (r) {
+    if (!r || !r.ok) throw new Error(r && r.error || '저장 실패');
+    items.forEach(function (it) { var p = S.placeBy[it.id]; if (p) {
+      p.lat = it.lat === '' ? null : it.lat; p.lng = it.lng === '' ? null : it.lng; p.addr2 = it.addr2; p.pnu = it.pnu; p.status = it.status; } });
+    setTimeout(saveCache, 0);
+    return r;
+  });
+}
+
+/* ===== 주소 -> 좌표, 필지고유번호 ===== */
+var SIDO = /^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|충청|전라|경상)/;
+function isMulti(a) { return /[,\/~]|외\s*\d/.test(a); }
+function candidates(addr, farmAddr) {
+  var a = norm(addr), out = [];
+  var first = norm(a.split(/[,\/~]/)[0]);
+  [a, first].forEach(function (s) {
+    if (!s) return;
+    out.push(s);
+    out.push(s.replace(/산\s+(\d)/, '산$1'));
+    if (!SIDO.test(s) && farmAddr) { var t = norm(farmAddr).split(' '); if (t.length >= 2 && SIDO.test(t[0])) out.push(t[0] + ' ' + t[1] + ' ' + s); }
+  });
+  return out.filter(function (s, i) { return out.indexOf(s) === i; });
+}
+// 법정동코드 10자리 + 산 여부 1자리 + 본번 4자리 + 부번 4자리
+function pnuOf(a) {
+  if (!a || !/^\d{10}$/.test(a.b_code || '') || !/^\d{1,4}$/.test(a.main_address_no || '')) return '';
+  var pad = function (x) { return ('0000' + (x || '0')).slice(-4); };
+  return a.b_code + (a.mountain_yn === 'Y' ? '2' : '1') + pad(a.main_address_no) + pad(a.sub_address_no);
+}
+function geocodeOne(p, farmAddr) {
+  var list = candidates(p.addr, farmAddr), i = 0;
+  return new Promise(function (res) {
+    (function next() {
+      if (i >= list.length) return res({ id: p.id, lat: '', lng: '', addr2: '', pnu: '', status: '실패' });
+      geocoder.addressSearch(list[i++], function (r, st) {
+        if (st === kakao.maps.services.Status.OK && r && r.length) {
+          var a = r[0].address;
+          return res({ id: p.id, lat: +(+r[0].y).toFixed(7), lng: +(+r[0].x).toFixed(7), addr2: (a && a.address_name) || r[0].address_name || '',
+            pnu: pnuOf(a), status: isMulti(norm(p.addr)) ? '확인필요' : '변환' });
+        }
+        next();
+      });
+    })();
+  });
+}
+function todoPlaces() { return S.places.filter(function (p) { return !hasXY(p) && p.status !== '실패'; }); }
+function runGeocode() {
+  if (S.busy) return;
+  var todo = todoPlaces();
+  if (!todo.length) return toast('변환할 주소가 없습니다');
+  var homeOf = {};
+  S.spots.forEach(function (sp) { var f = S.farmBy[sp.season + '|' + sp.code]; if (f && f.addr && !homeOf[sp.pid]) homeOf[sp.pid] = f.addr; });
+  S.busy = true; var done = 0, ok = 0, buf = [];
+  function flush() { var b = buf; buf = []; return b.length ? save(b) : Promise.resolve(); }
+  function finish(err) {
+    S.busy = false; drawChips(); drawPins(); menuHint();
+    if (err) return toast('저장 중 오류: ' + err.message);
+    toast('변환 ' + ok + '건, 실패 ' + (todo.length - ok) + '건');
+    fit(shown());
+  }
+  (function step() {
+    if (done >= todo.length) return flush().then(function () { finish(); }, finish);
+    geocodeOne(todo[done], homeOf[todo[done].id]).then(function (it) {
+      done++; if (it.status !== '실패') ok++; buf.push(it);
+      toast('좌표 변환 ' + done + ' / ' + todo.length, true);
+      var go = function () { setTimeout(step, 60); };
+      if (buf.length >= 40) flush().then(go, finish); else go();
+    });
+  })();
+}
+function menuHint() {
+  var n = todoPlaces().length;
+  var f = S.places.filter(function (p) { return p.status === '실패'; }).length;
+  $('mGeoHint').textContent = '변환 대기 ' + n + '건' + (f ? ' · 실패 ' + f + '건은 위치 직접 지정' : '');
+}
+
+/* ===== 내 위치 ===== */
+function locate() {
+  if (!navigator.geolocation) return toast('이 기기에서는 위치를 쓸 수 없습니다');
+  toast('위치 확인 중', true);
+  navigator.geolocation.getCurrentPosition(function (pos) {
+    var ll = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+    if (!meOverlay) { var d = document.createElement('div'); d.className = 'me';
+      meOverlay = new kakao.maps.CustomOverlay({ position: ll, content: d, xAnchor: 0.5, yAnchor: 0.5 }); }
+    meOverlay.setPosition(ll); meOverlay.setMap(map);
+    map.setLevel(5); map.setCenter(ll); $('toast').hidden = true;
+  }, function () { toast('위치를 가져오지 못했습니다(위치 권한 확인)'); }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+/* ===== 시작 ===== */
+function apply(r, refit) {
+  S.cur = r.season; S.seasons = r.seasons && r.seasons.length ? r.seasons : [r.season];
+  if (S.seasons.indexOf(S.season) < 0) S.season = r.season;
+  S.cardUrl = r.cardUrl || ''; S.farms = r.farms; S.spots = r.spots; S.places = r.places; S.farmBy = {}; S.placeBy = {};
+  S.farms.forEach(function (f) { S.farmBy[f.season + '|' + f.code] = f; });
+  S.places.forEach(function (p) { p.addr = norm(p.addr); S.placeBy[p.id] = p; });
+  rebuild();
+  $('gate').hidden = true;
+  drawChips();
+  if (map.relayout) map.relayout(); // 위쪽 칩 줄이 생기면서 지도 높이가 달라진다
+  drawPins(); menuHint(); if (refit) fit(shown());
+}
+// 지난번에 받은 자료를 이 기기에 남겨 두었다가 열자마자 먼저 보여 준다.
+function cached() { try { var r = JSON.parse(store('agro_cache') || 'null'); return r && r.farms && r.spots && r.places ? r : null; } catch (e) { return null; } }
+function saveCache() {
+  if (!S.farms.length) return;
+  var spots = S.spots.map(function (sp) { return { season: sp.season, code: sp.code, type: sp.type, no: sp.no, pid: sp.pid, variety: sp.variety, memo: sp.memo }; });
+  store('agro_cache', JSON.stringify({ ok: true, season: S.cur, seasons: S.seasons, cardUrl: S.cardUrl, farms: S.farms, spots: spots, places: S.places }));
+}
+function forget() { store('agro_cache', ''); S.farms = []; S.spots = []; S.places = []; S.farmBy = {}; S.placeBy = {}; S.now = []; S.spotBy = {};
+  if (map) { drawChips(); drawPins(); } closeSheet(); }
+function load() {
+  var old = S.farms.length ? null : cached();
+  if (old) apply(old, true);
+  var first = !S.farms.length;
+  toast(first ? '불러오는 중' : '최신 자료 확인 중', true);
+  return call('getData', {}).then(function (r) {
+    if (!r || !r.ok) { var e = new Error(r && r.error || '불러오기 실패'); e.auth = r && r.auth; throw e; }
+    store('agro_cache', JSON.stringify(r));
+    // 농가 상세를 보고 있거나 위치 지정·변환 중이면 화면을 갈아엎지 않는다.
+    if (first || ($('sheet').hidden && !S.picking && !S.busy)) apply(r, first);
+    $('toast').hidden = true;
+  }).catch(function (e) {
+    $('toast').hidden = true;
+    if (e.auth || !S.farms.length) { forget(); showGate(e.message); }
+    else toast('최신 자료를 받지 못했습니다. 지난번 자료로 표시 중');
+  });
+}
+function showGate(msg) {
+  $('gKey').value = ''; $('gName').value = store('agro_name'); $('gateMsg').textContent = msg || ''; $('gate').hidden = false;
+}
+function wire() {
+  var t; $('q').addEventListener('input', function () { var v = this.value; clearTimeout(t); t = setTimeout(function () { search(v); }, 120); });
+  $('q').addEventListener('focus', function () { if (this.value) search(this.value); });
+  $('results').addEventListener('click', function (e) {
+    if (e.target.closest('[data-x]')) { this.hidden = true; return; }
+    var b = e.target.closest('[data-code]'); if (b) openFarm(b.dataset.code, b.dataset.sid);
+  });
+  $('sheet').addEventListener('click', function (e) {
+    var b;
+    if (e.target.closest('[data-close]')) return closeSheet();
+    if (e.target.closest('[data-more]')) { S.expanded = !S.expanded; return openFarm(S.openCode, S.sel, { keep: true, still: true }); }
+    if ((b = e.target.closest('[data-go]'))) { var sp = S.spotBy[b.dataset.go]; openFarm(sp.code, sp.id, { keep: true }); return; }
+    if ((b = e.target.closest('[data-pick]'))) return startPick(b.dataset.pick);
+  });
+  $('menuBtn').onclick = function () { $('menu').hidden = !$('menu').hidden; };
+  $('mGeo').onclick = function () { $('menu').hidden = true; runGeocode(); };
+  $('mAll').onclick = function () { $('menu').hidden = true; closeSheet(); fit(shown()); };
+  $('mReload').onclick = function () { $('menu').hidden = true; load(); };
+  $('mKey').onclick = function () { $('menu').hidden = true; store('agro_key', ''); forget(); showGate(''); };
+  $('pickCancel').onclick = endPick;
+  $('btnSky').onclick = function () { S.sky = !S.sky; this.classList.toggle('on', S.sky);
+    map.setMapTypeId(S.sky ? kakao.maps.MapTypeId.HYBRID : kakao.maps.MapTypeId.ROADMAP); };
+  $('btnCad').onclick = function () { S.cad = !S.cad; this.classList.toggle('on', S.cad);
+    if (S.cad) map.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT); else map.removeOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT); };
+  $('btnMe').onclick = locate;
+  $('gGo').onclick = function () {
+    var k = $('gKey').value.trim(); if (!k) { $('gateMsg').textContent = '암호를 입력하세요'; return; }
+    store('agro_key', k); store('agro_name', norm($('gName').value)); $('gateMsg').textContent = ''; load();
+  };
+  $('gKey').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('gGo').click(); });
+}
+function start() {
+  try { var t = JSON.parse(store('agro_types') || 'null'); if (t) TYPES.forEach(function (k) { if (typeof t[k] === 'boolean') S.types[k] = t[k]; }); } catch (e) {}
+  if (store('agro_color') === 'variety') S.colorPref = 'variety';
+  wire();
+  loadKakao().then(function () {
+    initMap();
+    if (store('agro_key')) load(); else showGate('');
+  }).catch(function (e) { toast(e.message, true); });
+}
+// 체험·점검용: ?mock=data 는 진짜 카카오 지도에 가짜 자료, ?mock=1 은 지도까지 가짜(demo.js). 암호는 test.
+if (/[?&]mock=(1|data)/.test(location.search)) {
+  var m = document.createElement('script'); m.src = 'demo.js'; m.onload = start; m.onerror = start; document.head.appendChild(m);
+} else {
+  start();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
+}
+</script>
+</body>
+</html>
