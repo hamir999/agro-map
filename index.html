@@ -346,7 +346,12 @@ function fit(list, maxLevel) {
   var b = new kakao.maps.LatLngBounds();
   pts.forEach(function (sp) { b.extend(LL(sp.place)); });
   map.setBounds(b, 50, 70, 50, 40); // 가장자리와 오른쪽 버튼에 가려지지 않게 여백을 둔다
-  if (maxLevel && map.getLevel() > maxLevel) map.setLevel(maxLevel);
+  // 멀리 떨어진 곳이 하나 섞여 있으면 전체가 다 들어오지 않는다. 그럴 때는 가운데가 아니라 점이 몰린 곳(중앙값)을 비춘다.
+  if (maxLevel && map.getLevel() > maxLevel) {
+    var mid = function (a) { a = a.slice().sort(function (x, y) { return x - y; }); return a[Math.floor(a.length / 2)]; };
+    map.setLevel(maxLevel);
+    map.setCenter(new kakao.maps.LatLng(mid(pts.map(function (sp) { return sp.place.lat; })), mid(pts.map(function (sp) { return sp.place.lng; }))));
+  }
 }
 
 /* ===== 위쪽 칩 ===== */
