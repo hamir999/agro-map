@@ -57,6 +57,12 @@
         address: { address_name: q, b_code: '4427034022', mountain_yn: m[1] ? 'Y' : 'N', main_address_no: m[2] || '', sub_address_no: m[3] || '' } }], 'OK');
     }, 5);
   };
+  Geocoder.prototype.coord2Address = function (x, y, cb) {
+    setTimeout(function () { cb([{ address: { address_name: '충남 당진시 신평면 가상리 ' + Math.round((y % 1) * 1000), mountain_yn: 'N', main_address_no: String(Math.round((y % 1) * 1000)), sub_address_no: '' }, road_address: null }], 'OK'); }, 5);
+  };
+  Geocoder.prototype.coord2RegionCode = function (x, y, cb) {
+    setTimeout(function () { cb([{ region_type: 'B', code: '4427034022' }, { region_type: 'H', code: '4427035000' }], 'OK'); }, 5);
+  };
   window.MOCK_GEO_LOG = [];
   if (/[?&]mock=1/.test(location.search)) window.kakao = { maps: {
     load: function (cb) { cb(); }, Map: Map, LatLng: LatLng, LatLngBounds: Bounds, CustomOverlay: CustomOverlay,
@@ -121,6 +127,14 @@
       setTimeout(function () {
         if (payload.key !== 'test') return res({ ok: false, auth: true, error: '암호가 맞지 않습니다' });
         if (api === 'getData') return res(JSON.parse(JSON.stringify({ ok: true, season: 2026, seasons: [2025, 2026], cardUrl: 'https://example.com/card', farms: farms, spots: spots, places: places })));
+        if (api === 'saveCoords' && payload.fix) {
+          var f = payload.fix, it = payload.items[0];
+          window.MOCK_SAVES.push({ by: payload.by, fix: f, items: payload.items });
+          var sp = spots.filter(function (x) { return x.season === f.season && x.code === f.code && x.type === f.type && x.no === f.no; })[0];
+          if (!sp || f.season !== 2026) return res({ ok: false, error: '지난 시즌 기록은 농가카드 주소를 바꿀 수 없습니다' });
+          sp.pid = place(f.type, f.newAddr, it.lat, it.lng, '직접지정', { addr2: it.addr2, pnu: it.pnu });
+          return res({ ok: true, saved: 1, fixed: true, pid: sp.pid });
+        }
         if (api === 'saveCoords') {
           window.MOCK_SAVES.push({ by: payload.by, items: payload.items });
           payload.items.forEach(function (it) { places.forEach(function (p) { if (p.id === it.id) {

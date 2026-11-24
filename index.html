@@ -101,9 +101,13 @@
   #menu button:active { background: var(--soft); }
   #menu .hint { font-size: 12px; color: var(--sub); padding: 4px 10px 8px; line-height: 1.5; }
 
+  #pickBar .pk { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  #pickBar small { display: block; margin-top: 6px; color: #c9d2cd; font-size: 12px; line-height: 1.4; }
+  #pickBar button.on { background: #fff; color: var(--ink); border-color: #fff; font-weight: 700; }
+  .tmp { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid var(--ink); box-shadow: 0 0 0 2px #fff; }
   #pickBar { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 8; background: var(--ink); color: #fff;
-    border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; }
-  #pickBar button { border: 1px solid rgba(255,255,255,.5); background: none; color: #fff; border-radius: 6px; height: 30px; padding: 0 10px; }
+    border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.4; }
+  #pickBar button { border: 1px solid rgba(255,255,255,.5); background: none; color: #fff; border-radius: 6px; height: 34px; padding: 0 12px; }
 
   #gate { position: absolute; inset: 0; background: rgba(255,255,255,.97); z-index: 20; display: flex; align-items: center; justify-content: center; padding: 20px; }
   .gate-box { width: 100%; max-width: 320px; }
@@ -145,7 +149,7 @@
       <button class="btn" id="btnMe">내 위치</button>
     </div>
     <div id="results" hidden></div>
-    <div id="pickBar" hidden><span id="pickText"></span><button id="pickCancel">취소</button></div>
+    <div id="pickBar" hidden></div>
     <div id="menu" hidden>
       <button id="mGeo">주소를 좌표로 변환</button>
       <div class="hint" id="mGeoHint"></div>
@@ -291,7 +295,7 @@ function initMap() {
   geocoder = new kakao.maps.services.Geocoder();
   kakao.maps.event.addListener(map, 'zoom_changed', onZoom);
   kakao.maps.event.addListener(map, 'click', function (e) {
-    if (S.picking) return placeSpot(S.picking, e.latLng.getLat(), e.latLng.getLng());
+    if (S.picking) return pickPoint(e.latLng.getLat(), e.latLng.getLng());
     closeSheet(); $('menu').hidden = true;
   });
 }
@@ -446,8 +450,10 @@ function spotBlock(sp, cur) {
   var pl = sp.place, st = pl.status && pl.status !== '변환' ? '<span class="badge' + (pl.status === '직접지정' ? '' : ' warn') + '">' + esc(pl.status) + '</span>' : '';
   var note = [sp.type === '밭' ? norm(sp.variety) : '', norm(sp.memo)].filter(Boolean).join(' · ');
   var info = placeInfo(pl);
+  var picked = pl.status === '직접지정' && pl.addr2 && norm(pl.addr2) !== norm(pl.addr) ? '지도에서 지정한 위치: ' + pl.addr2 : '';
   return '<div class="parcel' + (cur ? ' cur' : '') + '">' +
     '<div class="addr">' + shape(sp.type, colorOf(sp), 14) + '<span>' + esc(sp.type) + (sp.type === '밭' ? ' ' + sp.no : '') + ' · ' + esc(pl.addr) + st + '</span></div>' +
+    (picked ? '<div class="note">' + esc(picked) + '</div>' : '') +
     (note ? '<div class="note">' + esc(note) + '</div>' : '') + (info ? '<div class="note">' + esc(info) + '</div>' : '') +
     '<div class="acts">' + (hasXY(pl) ? (cur ? '' : '<button data-go="' + esc(sp.id) + '">지도에서 보기</button>') + navLinks(pl) : '') +
     '<button data-pick="' + esc(sp.id) + '">' + (hasXY(pl) ? '위치 고치기' : '위치 직접 지정') + '</button></div></div>';
@@ -495,19 +501,90 @@ function closeSheet() { $('sheet').hidden = true; S.sel = null;
   Object.keys(pinEl).forEach(function (id) { pinEl[id].classList.remove('sel'); }); }
 
 /* ===== 위치 직접 지정 ===== */
+// 지도를 누르면 그 자리의 지번을 찾아 보여 주고, '위치만 저장' 또는 '농가카드 주소도 바꾸기'를 고른다.
+var tmpMark = null;
 function startPick(spotId) {
   var sp = S.spotBy[spotId]; if (!sp) return;
-  S.picking = spotId; $('sheet').hidden = true;
-  $('pickText').textContent = '지도를 눌러 위치 지정: ' + shortAddr(sp.place.addr);
-  $('pickBar').hidden = false;
+  S.picking = spotId; S.pending = null; $('sheet').hidden = true;
+  renderPick();
 }
-function endPick() { S.picking = null; $('pickBar').hidden = true; }
-function placeSpot(spotId, lat, lng) {
-  var sp = S.spotBy[spotId]; endPick();
-  var item = { id: sp.pid, lat: +lat.toFixed(7), lng: +lng.toFixed(7), addr2: sp.place.addr2 || '', pnu: '', status: '직접지정' };
-  toast('저장 중', true);
-  save([item]).then(function () { toast('위치를 저장했습니다'); drawChips(); drawPins(); openFarm(sp.code, spotId, { keep: true }); })
-    .catch(function (e) { toast('저장 실패: ' + e.message); });
+function endPick() {
+  S.picking = null; S.pending = null; $('pickBar').hidden = true;
+  if (tmpMark) tmpMark.setMap(null);
+}
+function renderPick() {
+  var sp = S.spotBy[S.picking], p = S.pending, b = $('pickBar');
+  if (!sp) return endPick();
+  var h;
+  if (!p) {
+    h = '<span>지도를 눌러 위치 지정: ' + esc(shortAddr(sp.place.addr)) + '</span>' +
+      '<small>지적 버튼을 켜면 지번 경계가 보입니다. 다시 누르면 위치가 옮겨집니다.</small>' +
+      '<div class="pk"><button data-pk="cancel">취소</button></div>';
+  } else if (p.busy) {
+    h = '<span>지번 찾는 중</span><div class="pk"><button data-pk="cancel">취소</button></div>';
+  } else {
+    var canFix = S.season === S.cur && p.newAddr && norm(p.newAddr) !== norm(sp.place.addr);
+    h = '<span>' + (p.newAddr ? '이 위치: ' + esc(p.newAddr) : '이 위치의 지번을 찾지 못했습니다') + '</span>' +
+      (canFix ? '<small>농가카드 ' + esc(sp.type) + (sp.type === '밭' ? ' ' + sp.no : '') + ' 주소: ' + esc(sp.place.addr) + '<br>→ ' + esc(p.newAddr) + '</small>' : '') +
+      '<div class="pk">' + (canFix ? '<button class="on" data-pk="fix">농가카드 주소도 바꾸기</button>' : '') +
+      '<button data-pk="pos">위치만 저장</button><button data-pk="cancel">취소</button></div>';
+  }
+  b.innerHTML = h; b.hidden = false;
+}
+function pickPoint(lat, lng) {
+  var sp = S.spotBy[S.picking]; if (!sp) return;
+  var ll = new kakao.maps.LatLng(lat, lng);
+  if (!tmpMark) { var d = document.createElement('div'); d.className = 'tmp';
+    tmpMark = new kakao.maps.CustomOverlay({ position: ll, content: d, xAnchor: 0.5, yAnchor: 0.5, zIndex: 5 }); }
+  tmpMark.setPosition(ll); tmpMark.setMap(map);
+  var ask = S.pending = { lat: +lat.toFixed(7), lng: +lng.toFixed(7), busy: true };
+  renderPick();
+  lookup(lat, lng).then(function (r) {
+    if (S.pending !== ask) return; // 그사이 다른 곳을 눌렀으면 버린다
+    ask.busy = false; ask.jibun = r.jibun; ask.pnu = r.pnu;
+    // 집은 도로명 주소가 있으면 그것을, 밭·하우스는 지번을 쓴다
+    ask.newAddr = sp.type === '집' ? (r.road || r.jibun) : r.jibun;
+    renderPick();
+  });
+}
+// 좌표 → 지번 주소, 도로명 주소, 필지고유번호
+function lookup(lat, lng) {
+  var OK = kakao.maps.services.Status.OK;
+  return new Promise(function (res) {
+    geocoder.coord2Address(lng, lat, function (r, st) {
+      var a = st === OK && r && r[0] ? r[0] : null;
+      var out = { jibun: a && a.address ? a.address.address_name : '', road: a && a.road_address ? a.road_address.address_name : '', pnu: '' };
+      if (!a || !a.address || !geocoder.coord2RegionCode) return res(out);
+      geocoder.coord2RegionCode(lng, lat, function (rc, st2) {
+        var b = st2 === OK && rc ? rc.filter(function (x) { return x.region_type === 'B'; })[0] : null;
+        if (b) out.pnu = pnuOf({ b_code: b.code, mountain_yn: a.address.mountain_yn, main_address_no: a.address.main_address_no, sub_address_no: a.address.sub_address_no });
+        res(out);
+      });
+    });
+  });
+}
+function pickAction(kind) {
+  if (kind === 'cancel') return endPick();
+  var sp = S.spotBy[S.picking], p = S.pending;
+  if (!sp || !p || p.busy) return;
+  var item = { id: sp.pid, lat: p.lat, lng: p.lng, addr2: p.jibun || '', pnu: p.pnu || '', status: '직접지정' };
+  var spotId = sp.id, code = sp.code;
+  endPick();
+  if (kind === 'pos') {
+    toast('저장 중', true);
+    return save([item]).then(function () { toast('위치를 저장했습니다'); drawChips(); drawPins(); openFarm(code, spotId, { keep: true }); })
+      .catch(function (e) { toast('저장 실패: ' + e.message); });
+  }
+  // 농가카드 DB의 그 칸도 새 주소로 바꾼다. 서버가 시트를 다시 맞춘 뒤 새로 불러온다.
+  toast('농가카드 주소 바꾸는 중', true);
+  call('saveCoords', { items: [item], by: store('agro_name'),
+    fix: { season: sp.season, code: sp.code, type: sp.type, no: sp.no, oldAddr: sp.place.addr, newAddr: p.newAddr } })
+    .then(function (r) {
+      if (!r || !r.ok) throw new Error(r && r.error || '저장 실패');
+      closeSheet();
+      return load().then(function () { toast('농가카드 주소와 위치를 바꿨습니다'); openFarm(code, spotId, { keep: true }); });
+    })
+    .catch(function (e) { toast('바꾸지 못했습니다: ' + e.message); });
 }
 function save(items) {
   return call('saveCoords', { items: items, by: store('agro_name') }).then(function (r) {
@@ -660,7 +737,7 @@ function wire() {
   $('mAll').onclick = function () { $('menu').hidden = true; closeSheet(); fit(shown()); };
   $('mReload').onclick = function () { $('menu').hidden = true; load(); };
   $('mKey').onclick = function () { $('menu').hidden = true; store('agro_key', ''); forget(); showGate(''); };
-  $('pickCancel').onclick = endPick;
+  $('pickBar').addEventListener('click', function (e) { var b = e.target.closest('[data-pk]'); if (b) pickAction(b.dataset.pk); });
   $('btnSky').onclick = function () { S.sky = !S.sky; this.classList.toggle('on', S.sky);
     map.setMapTypeId(S.sky ? kakao.maps.MapTypeId.HYBRID : kakao.maps.MapTypeId.ROADMAP); };
   $('btnCad').onclick = function () { S.cad = !S.cad; this.classList.toggle('on', S.cad);
